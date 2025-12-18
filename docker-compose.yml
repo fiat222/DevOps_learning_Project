@@ -1,0 +1,184 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: strapi
+      POSTGRES_USER: strapi
+      POSTGRES_PASSWORD: strapi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - app_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U strapi" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Strapi Backend
+  strapi1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: strapi_backend1
+    environment:
+      # Database
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: strapi
+      DATABASE_USERNAME: strapi
+      DATABASE_PASSWORD: strapi
+      DATABASE_SSL: false
+
+      # Strapi
+      HOST: 0.0.0.0
+      PUBLIC_URL: http://backend.local
+      APP_KEYS: ${APP_KEYS:-defaultAppKeys123456789}
+      API_TOKEN_SALT: ${API_TOKEN_SALT:-defaultTokenSalt123}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-defaultAdminSecret123}
+      JWT_SECRET: ${JWT_SECRET:-defaultJwtSecret123}
+      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:-defaultTransferSalt123}
+
+      # Node
+      NODE_ENV: production
+    volumes:
+      - strapi_uploads:/app/public/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  strapi2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: strapi_backend2
+    environment:
+      # Database
+      DATABASE_CLIENT: postgres
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: strapi
+      DATABASE_USERNAME: strapi
+      DATABASE_PASSWORD: strapi
+      DATABASE_SSL: false
+
+      # Strapi
+      HOST: 0.0.0.0
+      PUBLIC_URL: http://backend.local
+      APP_KEYS: ${APP_KEYS:-defaultAppKeys123456789}
+      API_TOKEN_SALT: ${API_TOKEN_SALT:-defaultTokenSalt123}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-defaultAdminSecret123}
+      JWT_SECRET: ${JWT_SECRET:-defaultJwtSecret123}
+      TRANSFER_TOKEN_SALT: ${TRANSFER_TOKEN_SALT:-defaultTransferSalt123}
+
+      # Node
+      NODE_ENV: production
+    volumes:
+      - strapi_uploads:/app/public/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: react_frontend
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro # ✅ สำคัญที่สุด
+      - ./frontend/devops/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/devops/app.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - strapi1
+      - strapi2
+      - frontend
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Nginx Prometheus Exporter
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx_exporter
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    ports:
+      - "9113:9113"
+    depends_on:
+      - nginx
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./frontend/devops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - app_network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+    driver: local
+  strapi_uploads:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
