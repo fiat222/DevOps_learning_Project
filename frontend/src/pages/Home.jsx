@@ -32,7 +32,7 @@ export default function Home() {
             try {
                 const data = await api.getProducts();
                 setProducts(data.data);
-            } catch (err) {
+            } catch {
                 setError('Failed to load products');
             } finally {
                 setLoading(false);
@@ -55,7 +55,7 @@ export default function Home() {
                 gap: '2rem'
             }}>
                 {products.map((product) => {
-                    const { name, price, image } = product; // Strapi v5 structure might differ, checking v4 structure: product.attributes?
+                    // Strapi v5 structure might differ, checking v4 structure: product.attributes?
                     // Adapting to standard Strapi v4 response structure where attributes holds the data
                     // If v5 or flat structure, this might need adjustment. Assuming v4 as per typical setup or flattened.
                     // Let's assume flattened for safety based on previous files, or check if attributes exists.

@@ -1,7 +1,24 @@
-# ============================================
-# Production Stage (Build locally first!)
-# ============================================
+# Stage 1: Build
+FROM node:20-alpine AS build
+
+# Install build dependencies for better-sqlite3 or other native modules
+RUN apk add --no-cache python3 make g++
+
+WORKDIR /app
+
+# Install dependencies first for better caching
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
+
+# Copy source and build
+COPY . .
+RUN npm run build
+
+# Stage 2: Production
 FROM node:20-alpine
+
+# Use production env
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -9,36 +26,28 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install ONLY production dependencies
-# Use virtual package to install build deps temporarily, then remove them
-RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
-    npm install --production --legacy-peer-deps && \
-    npm cache clean --force && \
-    apk del .build-deps
+# Add build deps temporarily if native modules need to be re-built during npm install
+RUN apk add --no-cache python3 make g++ && \
+    npm install --only=production --legacy-peer-deps && \
+    apk del python3 make g++
 
-# Copy pre-built application files
-COPY dist ./dist
-COPY config ./config
-COPY database ./database
-COPY src ./src
-COPY public ./public
-COPY favicon.png ./favicon.png
-
-# Copy TypeScript config (needed at runtime for Strapi)
-COPY tsconfig.json ./tsconfig.json
-COPY types ./types
+# Copy built files from build stage
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/public ./public
+COPY --from=build /app/config ./config
+COPY --from=build /app/database ./database
+COPY --from=build /app/src ./src
+COPY --from=build /app/types ./types
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY --from=build /app/favicon.png ./favicon.png
 
 # Create necessary directories
 RUN mkdir -p .tmp
 
-# Set environment to production
-ENV NODE_ENV=production
-
-# Expose Strapi port
 EXPOSE 1337
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s \
     CMD node -e "require('http').get('http://localhost:1337/_health', (r) => {process.exit(r.statusCode === 204 ? 0 : 1)})"
 
-# Start Strapi
 CMD ["npm", "run", "start"]

@@ -3,22 +3,19 @@ import api from '../config/api';
 
 const AuthContext = createContext();
 
+/* eslint-disable react-refresh/only-export-components */
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(() => {
+        const storedUser = localStorage.getItem('user_data');
+        return storedUser ? JSON.parse(storedUser) : null;
+    });
+    const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        // Check for existing session
-        const storedToken = localStorage.getItem('auth_token');
-        const storedUser = localStorage.getItem('user_data');
-
-        if (storedToken && storedUser) {
-            setToken(storedToken);
-            setUser(JSON.parse(storedUser));
-        }
+        // Just ensures loading is false if it was somehow true, but initialized to false now.
         setLoading(false);
     }, []);
 
@@ -35,7 +32,7 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('user_data', JSON.stringify(userData));
 
             return userData;
-        } catch (error) {
+        } catch {
             throw new Error('Invalid credentials');
         }
     };
@@ -51,7 +48,7 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('user_data', JSON.stringify(userData));
 
             return userData;
-        } catch (error) {
+        } catch {
             throw new Error('Registration failed');
         }
     };

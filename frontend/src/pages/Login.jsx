@@ -23,7 +23,7 @@ export default function Login() {
         try {
             await login(username, password);
             navigate(from, { replace: true });
-        } catch (err) {
+        } catch {
             setError('Invalid credentials');
         } finally {
             setIsSubmitting(false);
